@@ -15,3 +15,5 @@ DerivedData/
 *.app
 *.zip
 *.dmg
+
+.certs/
