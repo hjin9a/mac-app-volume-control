@@ -585,22 +585,22 @@ struct MenuBarIconMenu: View {
     var body: some View {
         Menu {
             Button {
-                model.selectMenuBarIcon(.hachiware)
-            } label: {
-                if model.selectedMenuBarIcon == .hachiware {
-                    Label("hachiware", systemImage: "checkmark")
-                } else {
-                    Text("hachiware")
-                }
-            }
-
-            Button {
                 model.selectMenuBarIcon(.chiikawa)
             } label: {
                 if model.selectedMenuBarIcon == .chiikawa {
                     Label("chiikawa", systemImage: "checkmark")
                 } else {
                     Text("chiikawa")
+                }
+            }
+
+            Button {
+                model.selectMenuBarIcon(.hachiware)
+            } label: {
+                if model.selectedMenuBarIcon == .hachiware {
+                    Label("hachiware", systemImage: "checkmark")
+                } else {
+                    Text("hachiware")
                 }
             }
 
@@ -792,17 +792,19 @@ struct ProcessVolumeRow: View {
 
                 Spacer(minLength: 8)
 
+                let isMuted = value <= 0.001
+
                 Button {
-                    value = 0
+                    value = isMuted ? 1 : 0
                 } label: {
-                    Image(systemName: "speaker.slash.fill")
+                    Image(systemName: isMuted ? "speaker.wave.2.fill" : "speaker.slash.fill")
                         .font(.system(size: 11, weight: .semibold))
                         .frame(width: 18, height: 18)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Mute \(process.displayName)")
+                .help(isMuted ? "Unmute \(process.displayName)" : "Mute \(process.displayName)")
             }
 
             HStack(spacing: 10) {
