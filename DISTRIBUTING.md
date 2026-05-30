@@ -2,6 +2,12 @@
 
 The recommended public distribution path is direct distribution with Developer ID signing and Apple notarization, then publishing the notarized zip through GitHub Releases or a website.
 
+Repository:
+
+```text
+https://github.com/hjin9a/mac-app-volume-control
+```
+
 ## One-Time Setup
 
 1. Enroll in the Apple Developer Program.
@@ -10,8 +16,8 @@ The recommended public distribution path is direct distribution with Developer I
 
 ```sh
 xcrun notarytool store-credentials "mac-app-volume-control" \
-  --apple-id "you@example.com" \
-  --team-id "TEAMID" \
+  --apple-id "hjin9a@icloud.com" \
+  --team-id "JK998K68ZS" \
   --password "app-specific-password"
 ```
 
@@ -38,10 +44,19 @@ NOTARY_PROFILE="mac-app-volume-control" \
 scripts/package-release.sh
 ```
 
+For the DIARO team, the signing identity should look similar to:
+
+```sh
+DEVELOPER_ID_APPLICATION="Developer ID Application: DIARO (JK998K68ZS)" \
+NOTARY_PROFILE="mac-app-volume-control" \
+scripts/package-release.sh
+```
+
 This creates a Developer ID signed, notarized, and stapled app plus a zip ready for GitHub Releases.
 
 ## Notes
 
 - macOS users have the smoothest install experience when the app is signed with Developer ID and notarized.
 - Free distribution is fine; GitHub Releases is enough as a hosting channel.
-- If you include third-party character-inspired icons, confirm you have the rights to redistribute them before publishing.
+- Public GitHub Releases require the repository to be public if you want anyone with the link to download without GitHub access.
+- The bundled character-inspired icons are intended for personal distribution only.

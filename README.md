@@ -2,6 +2,12 @@
 
 A macOS menu bar mixer for adjusting per-app audio volume.
 
+GitHub repository:
+
+```text
+https://github.com/hjin9a/mac-app-volume-control
+```
+
 ## Build
 
 ```sh
