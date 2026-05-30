@@ -22,10 +22,11 @@ struct MacAppVolumeControlMain {
 
 @MainActor
 @available(macOS 14.2, *)
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let popover = NSPopover()
     private let model = AudioMixerModel()
+    private var panel: NSPanel?
+    private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.onMenuBarIconChange = { [weak self] choice in
@@ -36,22 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.image = makeMenuBarIcon(model.selectedMenuBarIcon)
             button.imagePosition = .imageOnly
             button.title = ""
-            button.action = #selector(togglePopover)
+            button.action = #selector(togglePanel)
             button.target = self
         }
 
-        popover.behavior = .transient
-        popover.animates = true
-        popover.delegate = self
-        popover.contentSize = NSSize(width: 340, height: 430)
-        let appAppearance = NSAppearance(named: .aqua)
-        popover.appearance = appAppearance
-        let hostingController = NSHostingController(rootView: MixerPopoverView(model: model))
-        hostingController.view.wantsLayer = true
-        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
-        hostingController.view.appearance = appAppearance
-        popover.contentViewController = hostingController
-
+        configurePanel()
         model.start()
     }
 
@@ -59,17 +49,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.stopAll()
     }
 
-    @objc @MainActor private func togglePopover() {
+    @objc @MainActor private func togglePanel() {
         guard let button = statusItem.button else {
             return
         }
 
-        if popover.isShown {
-            popover.performClose(nil)
+        if panel?.isVisible == true {
+            closePanel()
         } else {
             model.refresh()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            showPanel(relativeTo: button)
             NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private func configurePanel() {
+        let appAppearance = NSAppearance(named: .aqua)
+        let hostingController = NSHostingController(rootView: MixerPopoverView(model: model))
+        hostingController.view.wantsLayer = true
+        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingController.view.appearance = appAppearance
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 430),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentViewController = hostingController
+        panel.appearance = appAppearance
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.hidesOnDeactivate = false
+        self.panel = panel
+    }
+
+    private func showPanel(relativeTo button: NSStatusBarButton) {
+        guard let panel, let buttonWindow = button.window else {
+            return
+        }
+
+        let buttonFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        let panelSize = panel.frame.size
+        let screenFrame = buttonWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let x = min(max(buttonFrame.midX - panelSize.width / 2, screenFrame.minX + 8), screenFrame.maxX - panelSize.width - 8)
+        let y = buttonFrame.minY - panelSize.height - 8
+
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.orderFrontRegardless()
+        installOutsideClickMonitor()
+    }
+
+    private func closePanel() {
+        panel?.orderOut(nil)
+        removeOutsideClickMonitor()
+    }
+
+    private func installOutsideClickMonitor() {
+        removeOutsideClickMonitor()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in
+                self?.closePanel()
+            }
+        }
+    }
+
+    private func removeOutsideClickMonitor() {
+        if let outsideClickMonitor {
+            NSEvent.removeMonitor(outsideClickMonitor)
+            self.outsideClickMonitor = nil
         }
     }
 }
@@ -482,7 +533,7 @@ struct MixerPopoverView: View {
 
     var body: some View {
         ZStack {
-            Color.clear
+            PanelGlassBackground()
 
             VStack(spacing: 12) {
                 header
@@ -576,6 +627,24 @@ struct MixerPopoverView: View {
             }
         }
         .frame(height: 32)
+    }
+}
+
+struct PanelGlassBackground: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+
+        if #available(macOS 26.0, *) {
+            shape
+                .fill(.clear)
+                .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        } else {
+            shape
+                .fill(.regularMaterial)
+                .overlay {
+                    shape.stroke(.white.opacity(0.16), lineWidth: 1)
+                }
+        }
     }
 }
 
@@ -781,6 +850,7 @@ struct FooterIconButton: View {
 struct ProcessVolumeRow: View {
     let process: AppAudioProcess
     @Binding var value: Double
+    @State private var lastAudibleValue = 1.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -795,7 +865,12 @@ struct ProcessVolumeRow: View {
                 let isMuted = value <= 0.001
 
                 Button {
-                    value = isMuted ? 1 : 0
+                    if isMuted {
+                        value = lastAudibleValue
+                    } else {
+                        lastAudibleValue = max(value, 0.01)
+                        value = 0
+                    }
                 } label: {
                     Image(systemName: isMuted ? "speaker.wave.2.fill" : "speaker.slash.fill")
                         .font(.system(size: 11, weight: .semibold))
@@ -811,7 +886,7 @@ struct ProcessVolumeRow: View {
                 AppIcon(process: process)
                     .frame(width: 20, height: 20)
 
-                Slider(value: $value, in: 0...1)
+                Slider(value: sliderValue, in: 0...1)
                     .controlSize(.small)
             }
         }
@@ -822,6 +897,23 @@ struct ProcessVolumeRow: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.18), lineWidth: 0.6)
         }
+        .onAppear {
+            if value > 0.001 {
+                lastAudibleValue = value
+            }
+        }
+    }
+
+    private var sliderValue: Binding<Double> {
+        Binding(
+            get: { value },
+            set: { newValue in
+                value = newValue
+                if newValue > 0.001 {
+                    lastAudibleValue = newValue
+                }
+            }
+        )
     }
 }
 

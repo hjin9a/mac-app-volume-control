@@ -51,6 +51,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 PLIST
 
 xattr -cr "$APP_DIR"
+find "$APP_DIR" -name "._*" -delete
 codesign --force --deep --sign - "$APP_DIR"
 
 rm -f "$DIST_DIR/MacAppVolumeControl.zip"
