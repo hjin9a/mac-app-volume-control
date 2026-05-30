@@ -21,13 +21,13 @@ fi
 codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID_APPLICATION" "$APP_DIR"
 
 rm -f "$ZIP_PATH"
-ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
+ditto -c -k --keepParent --norsrc --noextattr "$APP_DIR" "$ZIP_PATH"
 
 xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
 xcrun stapler staple "$APP_DIR"
 
 rm -f "$ZIP_PATH"
-ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
+ditto -c -k --keepParent --norsrc --noextattr "$APP_DIR" "$ZIP_PATH"
 
 echo "$APP_DIR"
 echo "$ZIP_PATH"

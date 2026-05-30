@@ -16,8 +16,8 @@ https://github.com/hjin9a/mac-app-volume-control
 
 ```sh
 xcrun notarytool store-credentials "mac-app-volume-control" \
-  --apple-id "hjin9a@icloud.com" \
-  --team-id "JK998K68ZS" \
+  --apple-id "your-apple-id@example.com" \
+  --team-id "YOUR_TEAM_ID" \
   --password "app-specific-password"
 ```
 
@@ -40,14 +40,6 @@ The local build is ad-hoc signed and is intended for testing on your Mac.
 
 ```sh
 DEVELOPER_ID_APPLICATION="Developer ID Application: Your Name (TEAMID)" \
-NOTARY_PROFILE="mac-app-volume-control" \
-scripts/package-release.sh
-```
-
-For the DIARO team, the signing identity should look similar to:
-
-```sh
-DEVELOPER_ID_APPLICATION="Developer ID Application: DIARO (JK998K68ZS)" \
 NOTARY_PROFILE="mac-app-volume-control" \
 scripts/package-release.sh
 ```
