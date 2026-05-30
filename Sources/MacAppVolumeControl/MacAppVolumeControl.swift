@@ -720,7 +720,7 @@ struct OutputDeviceMenu: View {
                 }
             }
         } label: {
-            Image(systemName: "speaker.wave.2.fill")
+            Image(systemName: "hifispeaker.fill")
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 28, height: 28)
                 .contentShape(Circle())
@@ -1000,14 +1000,21 @@ extension View {
     @ViewBuilder
     func glassCircleSurface() -> some View {
         if #available(macOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: Circle())
+            self
+                .glassEffect(.regular.interactive(), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 0.7)
+                }
+                .shadow(color: .black.opacity(0.10), radius: 3, x: 0, y: 1.2)
         } else {
             self
                 .background(.regularMaterial, in: Circle())
                 .overlay {
                     Circle()
-                        .stroke(.white.opacity(0.18), lineWidth: 0.6)
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 0.7)
                 }
+                .shadow(color: .black.opacity(0.10), radius: 3, x: 0, y: 1.2)
         }
     }
 
