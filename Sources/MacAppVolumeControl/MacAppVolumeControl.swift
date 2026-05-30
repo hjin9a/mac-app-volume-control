@@ -5,12 +5,12 @@ import SwiftUI
 
 @main
 @MainActor
-struct AppVolumeGlassMain {
+struct MacAppVolumeControlMain {
     private static let delegate = AppDelegate()
 
     static func main() {
         guard #available(macOS 14.2, *) else {
-            fatalError("AppVolumeGlass requires macOS 14.2 or newer.")
+            fatalError("Mac App Volume Control requires macOS 14.2 or newer.")
         }
 
         let app = NSApplication.shared
@@ -134,13 +134,13 @@ func makeMenuBarIcon(_ choice: MenuBarIconChoice) -> NSImage {
     let image = data.flatMap(NSImage.init(data:)) ?? NSImage(size: NSSize(width: 18, height: 16))
     image.size = NSSize(width: 18, height: 16)
     image.isTemplate = true
-    image.accessibilityDescription = "AppVolumeGlass"
+    image.accessibilityDescription = "Mac App Volume Control"
     return image
 }
 
 func menuBarIconURL(for choice: MenuBarIconChoice) -> URL? {
     let fileName = "\(choice.resourceName).svg"
-    let bundleName = "AppVolumeGlass_AppVolumeGlass.bundle"
+    let bundleName = "MacAppVolumeControl_MacAppVolumeControl.bundle"
     let candidates: [URL?] = [
         Bundle.main.resourceURL?
             .appendingPathComponent(bundleName)
@@ -289,7 +289,7 @@ final class AudioMixerModel: ObservableObject {
 
     var visibleProcesses: [AppAudioProcess] {
         let filtered = showIdleApps ? processes : processes.filter(\.isRunningOutput)
-        return filtered.filter { !$0.bundleID.contains("AppVolumeGlass") }
+        return filtered.filter { !$0.bundleID.contains("MacAppVolumeControl") }
     }
 
     func start() {
@@ -414,7 +414,7 @@ final class AudioMixerModel: ObservableObject {
     private func makeController(for process: AppAudioProcess, gain: Float) throws -> DuckedTap {
         guard let outputDevice = selectedOutputDevice else {
             throw NSError(
-                domain: "AppVolumeGlass",
+                domain: "MacAppVolumeControl",
                 code: 4,
                 userInfo: [NSLocalizedDescriptionKey: "No output device is available."]
             )
@@ -570,7 +570,7 @@ struct MixerPopoverView: View {
                     isShowingResetConfirmation = true
                 }
 
-                FooterIconButton(systemName: "power", help: "Quit AppVolumeGlass") {
+                FooterIconButton(systemName: "power", help: "Quit Mac App Volume Control") {
                     model.quit()
                 }
             }
@@ -1198,7 +1198,7 @@ final class DuckedTap {
         self.gainBox = GainBox(max(0, min(gain, 1)))
 
         let description = CATapDescription(stereoMixdownOfProcesses: [process.objectID])
-        description.name = "AppVolumeGlass \(process.displayName)"
+        description.name = "Mac App Volume Control \(process.displayName)"
         description.uuid = UUID()
         description.isPrivate = true
         description.muteBehavior = .mutedWhenTapped
@@ -1214,8 +1214,8 @@ final class DuckedTap {
         let outputUID = outputDevice.uid
 
         let aggregateDescription: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "AppVolumeGlass \(outputDevice.name)",
-            kAudioAggregateDeviceUIDKey: "dev.codex.AppVolumeGlass.\(UUID().uuidString)",
+            kAudioAggregateDeviceNameKey: "Mac App Volume Control \(outputDevice.name)",
+            kAudioAggregateDeviceUIDKey: "com.hjin9a.MacAppVolumeControl.\(UUID().uuidString)",
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: true,
             kAudioAggregateDeviceTapAutoStartKey: true,
@@ -1288,7 +1288,7 @@ final class DuckedTap {
 func tapUIDString(tapID: AudioObjectID) throws -> String {
     guard let tapUID = stringProperty(objectID: tapID, selector: kAudioTapPropertyUID) else {
         throw NSError(
-            domain: "AppVolumeGlass",
+            domain: "MacAppVolumeControl",
             code: 4,
             userInfo: [NSLocalizedDescriptionKey: "Could not read tap UID."]
         )
