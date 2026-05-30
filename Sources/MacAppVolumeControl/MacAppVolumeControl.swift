@@ -784,10 +784,26 @@ struct ProcessVolumeRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(process.displayName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            HStack(spacing: 8) {
+                Text(process.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    value = 0
+                } label: {
+                    Image(systemName: "speaker.slash.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Mute \(process.displayName)")
+            }
 
             HStack(spacing: 10) {
                 AppIcon(process: process)
