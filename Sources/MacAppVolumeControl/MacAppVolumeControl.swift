@@ -212,13 +212,19 @@ func menuBarIconURL(for choice: MenuBarIconChoice) -> URL? {
 
 struct AppAudioProcess: Identifiable, Comparable, Hashable {
     let objectID: AudioObjectID
+    let tapObjectIDs: [AudioObjectID]
     let pid: pid_t
     let bundleID: String
     let name: String
     let isRunningOutput: Bool
 
     var id: String {
-        "\(objectID)-\(pid)-\(bundleID)"
+        let appBundleID = identity.bundleID
+        if !appBundleID.isEmpty {
+            return "app-\(appBundleID)"
+        }
+
+        return "\(objectID)-\(pid)-\(bundleID)"
     }
 
     var displayName: String {
@@ -518,10 +524,11 @@ final class AudioMixerModel: ObservableObject {
             }
 
             if !controller.hasObservedAudio {
-                controller.stop()
-                self.controllers[process.id] = nil
-                self.volumes[process.id] = 1
-                self.statusText = "No captured audio. Grant Screen & System Audio Recording, then relaunch."
+                if controller.hasReceivedCallbacks {
+                    self.statusText = "Waiting for \(process.displayName) audio"
+                } else {
+                    self.statusText = "Grant Screen & System Audio Recording, then relaunch."
+                }
             }
         }
     }
@@ -1193,7 +1200,7 @@ func audioProcesses() throws -> [AppAudioProcess] {
         selector: kAudioHardwarePropertyProcessObjectList
     )
 
-    return ids.compactMap { objectID in
+    let processes = ids.compactMap { objectID in
         do {
             let pid = try pidProperty(objectID: objectID)
             let bundleID = stringProperty(objectID: objectID, selector: kAudioProcessPropertyBundleID) ?? ""
@@ -1204,6 +1211,7 @@ func audioProcesses() throws -> [AppAudioProcess] {
 
             return AppAudioProcess(
                 objectID: objectID,
+                tapObjectIDs: [objectID],
                 pid: pid,
                 bundleID: bundleID,
                 name: runningName(pid: pid, bundleID: bundleID),
@@ -1213,7 +1221,38 @@ func audioProcesses() throws -> [AppAudioProcess] {
             return nil
         }
     }
-    .sorted()
+
+    return groupedAudioProcesses(processes).sorted()
+}
+
+func groupedAudioProcesses(_ processes: [AppAudioProcess]) -> [AppAudioProcess] {
+    let grouped = Dictionary(grouping: processes) { process in
+        let appBundleID = process.identity.bundleID
+        if !appBundleID.isEmpty {
+            return "app-\(appBundleID)"
+        }
+
+        return "process-\(process.objectID)-\(process.pid)"
+    }
+
+    return grouped.values.map { members in
+        let primary = members.sorted { lhs, rhs in
+            if lhs.isRunningOutput != rhs.isRunningOutput {
+                return lhs.isRunningOutput && !rhs.isRunningOutput
+            }
+
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }[0]
+
+        return AppAudioProcess(
+            objectID: primary.objectID,
+            tapObjectIDs: members.map(\.objectID),
+            pid: primary.pid,
+            bundleID: primary.bundleID,
+            name: primary.name,
+            isRunningOutput: members.contains(where: \.isRunningOutput)
+        )
+    }
 }
 
 func audioOutputDevices() throws -> [AudioOutputDevice] {
@@ -1310,11 +1349,15 @@ final class DuckedTap {
         gainBox.nonSilentSampleCount > 0
     }
 
+    var hasReceivedCallbacks: Bool {
+        gainBox.callbackCount > 0
+    }
+
     init(process: AppAudioProcess, gain: Float, outputDevice: AudioOutputDevice) throws {
         self.process = process
         self.gainBox = GainBox(max(0, min(gain, 1)))
 
-        let description = CATapDescription(stereoMixdownOfProcesses: [process.objectID])
+        let description = CATapDescription(stereoMixdownOfProcesses: process.tapObjectIDs)
         description.name = "Mac App Volume Control \(process.displayName)"
         description.uuid = UUID()
         description.isPrivate = true
