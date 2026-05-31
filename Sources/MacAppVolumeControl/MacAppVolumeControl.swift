@@ -1,5 +1,6 @@
 import AppKit
 import CoreAudio
+import Darwin
 import Foundation
 import SwiftUI
 
@@ -239,6 +240,10 @@ struct AppAudioProcess: Identifiable, Comparable, Hashable {
         identity.bundleID
     }
 
+    var isSystemSound: Bool {
+        identity.bundleID == "com.apple.systemsoundserverd"
+    }
+
     var identity: AppIdentity {
         AppIdentity(processName: name, bundleID: bundleID, pid: pid)
     }
@@ -246,6 +251,9 @@ struct AppAudioProcess: Identifiable, Comparable, Hashable {
     static func < (lhs: AppAudioProcess, rhs: AppAudioProcess) -> Bool {
         if lhs.isRunningOutput != rhs.isRunningOutput {
             return lhs.isRunningOutput && !rhs.isRunningOutput
+        }
+        if lhs.isSystemSound != rhs.isSystemSound {
+            return lhs.isSystemSound && !rhs.isSystemSound
         }
         return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
     }
@@ -286,6 +294,9 @@ struct AppIdentity: Hashable {
         if bundleID.hasPrefix("com.google.Chrome") || lowerName.contains("chrome") {
             self.displayName = "Chrome"
             self.bundleID = "com.google.Chrome"
+        } else if lowerName.contains("systemsoundserverd") || lowerName.contains("systemsound") {
+            self.displayName = "System"
+            self.bundleID = "com.apple.systemsoundserverd"
         } else if bundleID == "com.apple.Safari" || lowerName.contains("safari") {
             self.displayName = "Safari"
             self.bundleID = "com.apple.Safari"
@@ -345,7 +356,7 @@ final class AudioMixerModel: ObservableObject {
     }
 
     var visibleProcesses: [AppAudioProcess] {
-        let filtered = showIdleApps ? processes : processes.filter(\.isRunningOutput)
+        let filtered = showIdleApps ? processes : processes.filter { $0.isRunningOutput || $0.isSystemSound }
         return filtered.filter { !$0.bundleID.contains("MacAppVolumeControl") }
     }
 
@@ -935,6 +946,19 @@ struct AppIcon: View {
     }
 
     private func icon() -> NSImage {
+        if process.isSystemSound {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.systempreferences") {
+                return NSWorkspace.shared.icon(forFile: url.path)
+            }
+
+            let systemSettingsPath = "/System/Applications/System Settings.app"
+            if FileManager.default.fileExists(atPath: systemSettingsPath) {
+                return NSWorkspace.shared.icon(forFile: systemSettingsPath)
+            }
+
+            return NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: nil) ?? NSImage()
+        }
+
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: process.iconBundleID) {
             return NSWorkspace.shared.icon(forFile: url.path)
         }
@@ -1183,6 +1207,10 @@ func stringProperty(objectID: AudioObjectID, selector: AudioObjectPropertySelect
 
 func runningName(pid: pid_t, bundleID: String) -> String {
     guard let app = NSRunningApplication(processIdentifier: pid) else {
+        if let executableName = processExecutableName(pid: pid) {
+            return executableName
+        }
+
         return bundleID.isEmpty ? "pid \(pid)" : bundleID
     }
 
@@ -1192,6 +1220,22 @@ func runningName(pid: pid_t, bundleID: String) -> String {
 
     return app.bundleURL?.deletingPathExtension().lastPathComponent
         ?? (bundleID.isEmpty ? "pid \(pid)" : bundleID)
+}
+
+func processExecutableName(pid: pid_t) -> String? {
+    var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN * 4))
+    let result = pathBuffer.withUnsafeMutableBufferPointer { buffer in
+        proc_pidpath(pid, buffer.baseAddress, UInt32(buffer.count))
+    }
+
+    guard result > 0 else {
+        return nil
+    }
+
+    let pathBytes = pathBuffer.prefix(Int(result)).map { UInt8(bitPattern: $0) }
+    let path = String(decoding: pathBytes, as: UTF8.self)
+    let name = URL(fileURLWithPath: path).lastPathComponent
+    return name.isEmpty ? nil : name
 }
 
 func audioProcesses() throws -> [AppAudioProcess] {
