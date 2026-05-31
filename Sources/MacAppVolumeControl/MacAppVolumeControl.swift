@@ -349,10 +349,12 @@ final class AudioMixerModel: ObservableObject {
     private var controllers: [String: DuckedTap] = [:]
     private var timer: Timer?
     private let menuBarIconDefaultsKey = "selectedMenuBarIcon"
+    private let volumeDefaultsKey = "appVolumes"
 
     init() {
         let savedIcon = UserDefaults.standard.string(forKey: menuBarIconDefaultsKey)
         selectedMenuBarIcon = savedIcon.flatMap(MenuBarIconChoice.init(rawValue:)) ?? .hachiware
+        volumes = savedVolumes()
     }
 
     var visibleProcesses: [AppAudioProcess] {
@@ -378,6 +380,7 @@ final class AudioMixerModel: ObservableObject {
             processes = try audioProcesses()
             statusText = "\(visibleProcesses.count) apps visible"
             stopControllersForMissingProcesses()
+            startControllersForSavedRunningProcesses()
         } catch {
             statusText = shortError(error)
         }
@@ -389,15 +392,19 @@ final class AudioMixerModel: ObservableObject {
 
     func setVolume(_ value: Double, for process: AppAudioProcess) {
         let clamped = min(max(value, 0), 1)
-        volumes[process.id] = clamped
 
         do {
             if clamped >= 0.995 {
+                volumes[process.id] = nil
+                persistVolumes()
                 controllers[process.id]?.stop()
                 controllers[process.id] = nil
                 statusText = "\(process.displayName) back to 100%"
                 return
             }
+
+            volumes[process.id] = clamped
+            persistVolumes()
 
             if let controller = controllers[process.id] {
                 controller.gain = Float(clamped)
@@ -410,7 +417,8 @@ final class AudioMixerModel: ObservableObject {
 
             statusText = "\(process.displayName) \(Int(clamped * 100))%"
         } catch {
-            volumes[process.id] = 1
+            volumes[process.id] = nil
+            persistVolumes()
             controllers[process.id]?.stop()
             controllers[process.id] = nil
             statusText = shortError(error)
@@ -459,6 +467,7 @@ final class AudioMixerModel: ObservableObject {
         }
         controllers.removeAll()
         volumes.removeAll()
+        persistVolumes()
         statusText = "All apps reset"
     }
 
@@ -477,6 +486,28 @@ final class AudioMixerModel: ObservableObject {
         }
 
         selectedOutputDeviceID = devices.first(where: \.isDefault)?.id ?? devices.first?.id ?? ""
+    }
+
+    private func savedVolumes() -> [String: Double] {
+        guard let saved = UserDefaults.standard.dictionary(forKey: volumeDefaultsKey) else {
+            return [:]
+        }
+
+        return saved.compactMapValues { value in
+            if let number = value as? NSNumber {
+                return number.doubleValue
+            }
+
+            return value as? Double
+        }
+    }
+
+    private func persistVolumes() {
+        if volumes.isEmpty {
+            UserDefaults.standard.removeObject(forKey: volumeDefaultsKey)
+        } else {
+            UserDefaults.standard.set(volumes, forKey: volumeDefaultsKey)
+        }
     }
 
     private func makeController(for process: AppAudioProcess, gain: Float) throws -> DuckedTap {
@@ -509,7 +540,6 @@ final class AudioMixerModel: ObservableObject {
                 controllers[process.id] = controller
                 validateCapture(for: process, controller: controller)
             } catch {
-                volumes[process.id] = 1
                 statusText = shortError(error)
             }
         }
@@ -520,7 +550,24 @@ final class AudioMixerModel: ObservableObject {
         for id in controllers.keys where !currentIDs.contains(id) {
             controllers[id]?.stop()
             controllers[id] = nil
-            volumes[id] = nil
+        }
+    }
+
+    private func startControllersForSavedRunningProcesses() {
+        for process in processes where process.isRunningOutput {
+            let currentVolume = volume(for: process)
+            guard currentVolume < 0.995, controllers[process.id] == nil else {
+                continue
+            }
+
+            do {
+                let controller = try makeController(for: process, gain: Float(currentVolume))
+                try controller.start()
+                controllers[process.id] = controller
+                validateCapture(for: process, controller: controller)
+            } catch {
+                statusText = shortError(error)
+            }
         }
     }
 
